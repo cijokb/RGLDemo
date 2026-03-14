@@ -32,7 +32,7 @@ const loadInitialState = (): DashboardState => {
   }
   
   return {
-    layouts: { lg: [], md: [], sm: [], xs: [], xxs: [] },
+    layouts: { lg: [] },
     widgets: {},
     activeWidgetId: null,
     draggedWidgetTemplate: null,
@@ -47,62 +47,21 @@ export const dashboardSlice = createSlice({
   reducers: {
     addWidget: (state, action: PayloadAction<{ layout: any; widget: WidgetData }>) => {
       const { layout, widget } = action.payload;
-      const breakpoints = ['lg', 'md', 'sm', 'xs', 'xxs'];
-      const colsMap: Record<string, number> = { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 };
       
-      // Initialize layout for all standard breakpoints if they don't exist
-      breakpoints.forEach(bp => {
-        if (!state.layouts[bp]) {
-          state.layouts[bp] = [];
-        }
-        
-        // Check if widget already exists in this breakpoint to avoid duplicates
-        const exists = state.layouts[bp].some(l => l.i === layout.i);
-        if (!exists) {
-          let bpLayout = { ...layout };
-          const maxCols = colsMap[bp];
-          
-          // Ensure width and x-position don't exceed breakpoint capacity
-          bpLayout.w = Math.min(layout.w, maxCols);
-          if (bpLayout.x + bpLayout.w > maxCols) {
-            bpLayout.x = Math.max(0, maxCols - bpLayout.w);
-          }
-          
-          state.layouts[bp].push(bpLayout);
-        }
-      });
+      if (!state.layouts.lg) state.layouts.lg = [];
+      
+      const exists = state.layouts.lg.some(l => l.i === layout.i);
+      if (!exists) {
+        state.layouts.lg.push({ ...layout });
+      }
       
       state.widgets[widget.id] = widget;
     },
     dropWidget: (state, action: PayloadAction<{ breakpoint: string; layout: any[]; widget: WidgetData }>) => {
-      const { breakpoint, layout, widget } = action.payload;
+      const { layout, widget } = action.payload;
       
-      // Update the layout for the active breakpoint with the resolved positions
-      state.layouts[breakpoint] = layout;
-      
-      // For other breakpoints, we still need to add the widget if it doesn't exist
-      const breakpoints = ['lg', 'md', 'sm', 'xs', 'xxs'];
-      const colsMap: Record<string, number> = { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 };
-      
-      breakpoints.forEach(bp => {
-        if (bp !== breakpoint) {
-          if (!state.layouts[bp]) state.layouts[bp] = [];
-          const exists = state.layouts[bp].some(l => l.i === widget.id);
-          if (!exists) {
-            // Find the layout item for this widget from the provided layout
-            const droppedLayoutItem = layout.find(l => l.i === widget.id);
-            if (droppedLayoutItem) {
-              let bpLayout = { ...droppedLayoutItem };
-              const maxCols = colsMap[bp];
-              bpLayout.w = Math.min(bpLayout.w, maxCols);
-              if (bpLayout.x + bpLayout.w > maxCols) {
-                bpLayout.x = Math.max(0, maxCols - bpLayout.w);
-              }
-              state.layouts[bp].push(bpLayout);
-            }
-          }
-        }
-      });
+      // Always store under 'lg' since we use a single breakpoint
+      state.layouts.lg = layout;
       
       state.widgets[widget.id] = widget;
     },
