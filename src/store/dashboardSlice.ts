@@ -16,26 +16,43 @@ export interface WidgetData {
 interface DashboardState {
   layouts: { [breakpoint: string]: any[] };
   widgets: Record<string, WidgetData>;
+  widgetData: Record<string, { loading: boolean; data: any | null }>;
   activeWidgetId: string | null;
   draggedWidgetTemplate: { type: string; name: string } | null;
+  name: string;
+  description: string;
 }
 
 // Load initial state from localStorage if available
-const loadInitialState = (): DashboardState => {
+const loadInitialState = (id: string = 'default'): DashboardState => {
   try {
-    const serializedState = localStorage.getItem('dashboardData');
+    const serializedState = localStorage.getItem(`dashboardData_${id}`);
     if (serializedState) {
-      return JSON.parse(serializedState);
+      const parsedState = JSON.parse(serializedState);
+      
+      // Ensure all required state keys exist to avoid crashes in components
+      return {
+        layouts: parsedState.layouts || { lg: [] },
+        widgets: parsedState.widgets || {},
+        widgetData: parsedState.widgetData || {},
+        activeWidgetId: null, // Always reset transient state
+        draggedWidgetTemplate: null,
+        name: parsedState.name || (id === 'default' ? 'New Dashboard' : `Dashboard ${id}`),
+        description: parsedState.description || '',
+      };
     }
   } catch (err) {
-    console.error('Could not load dashboard data from localStorage', err);
+    console.error(`Could not load dashboard data for ${id} from localStorage`, err);
   }
   
   return {
     layouts: { lg: [] },
     widgets: {},
+    widgetData: {},
     activeWidgetId: null,
     draggedWidgetTemplate: null,
+    name: 'New Dashboard',
+    description: '',
   };
 };
 
@@ -74,6 +91,7 @@ export const dashboardSlice = createSlice({
         state.layouts[bp] = state.layouts[bp].filter((l: any) => l.i !== id);
       });
       delete state.widgets[id];
+      delete state.widgetData[id];
       if (state.activeWidgetId === id) {
         state.activeWidgetId = null;
       }
@@ -90,12 +108,40 @@ export const dashboardSlice = createSlice({
     setDraggedWidgetTemplate: (state, action: PayloadAction<{ type: string; name: string } | null>) => {
       state.draggedWidgetTemplate = action.payload;
     },
-    resetDashboard: (state) => {
-      const saved = loadInitialState();
+    resetDashboard: (state, action: PayloadAction<string>) => {
+      const saved = loadInitialState(action.payload);
       state.layouts = saved.layouts;
       state.widgets = saved.widgets;
+      state.widgetData = {};
       state.activeWidgetId = null;
       state.draggedWidgetTemplate = null;
+    },
+    loadDashboard: (state, action: PayloadAction<string>) => {
+      const saved = loadInitialState(action.payload);
+      state.layouts = saved.layouts;
+      state.widgets = saved.widgets;
+      state.widgetData = {};
+      state.activeWidgetId = null;
+      state.draggedWidgetTemplate = null;
+    },
+    setWidgetLoading: (state, action: PayloadAction<string>) => {
+      state.widgetData[action.payload] = { loading: true, data: null };
+    },
+    setWidgetData: (state, action: PayloadAction<{ id: string; data: any }>) => {
+      state.widgetData[action.payload.id] = { loading: false, data: action.payload.data };
+    },
+    clearDashboard: (state) => {
+      state.layouts = { lg: [] };
+      state.widgets = {};
+      state.widgetData = {};
+      state.activeWidgetId = null;
+      state.draggedWidgetTemplate = null;
+      state.name = 'New Dashboard';
+      state.description = '';
+    },
+    updateDashboardMetadata: (state, action: PayloadAction<{ name?: string; description?: string }>) => {
+      if (action.payload.name !== undefined) state.name = action.payload.name;
+      if (action.payload.description !== undefined) state.description = action.payload.description;
     },
   },
 });
@@ -109,6 +155,11 @@ export const {
   updateWidgetProperties,
   setDraggedWidgetTemplate,
   resetDashboard,
+  loadDashboard,
+  setWidgetLoading,
+  setWidgetData,
+  clearDashboard,
+  updateDashboardMetadata,
 } = dashboardSlice.actions;
 
 export default dashboardSlice.reducer;

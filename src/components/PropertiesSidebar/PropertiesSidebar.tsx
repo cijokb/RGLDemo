@@ -2,20 +2,49 @@ import React from 'react';
 import { Box, Typography, TextField, MenuItem, FormControlLabel, Switch, Radio, RadioGroup, Select, FormControl, InputLabel, Divider } from '@mui/material';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../store/store';
-import { updateWidgetProperties } from '../../store/dashboardSlice';
+import { updateWidgetProperties, updateDashboardMetadata } from '../../store/dashboardSlice';
 
 const languages = ['EN', 'ES', 'FR', 'DE'];
 const workspacesList = ['Global', 'Finance', 'HR', 'IT'];
 
 const PropertiesSidebar: React.FC = () => {
   const dispatch = useDispatch();
-  const { activeWidgetId, widgets } = useSelector((state: RootState) => state.dashboard);
+  const { activeWidgetId, widgets, name, description } = useSelector((state: RootState) => state.dashboard);
 
   if (!activeWidgetId || !widgets[activeWidgetId]) {
     return (
-      <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
-        <Typography variant="body2">No widget selected.</Typography>
-        <Typography variant="caption">Click on a widget in the canvas to edit its properties.</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        <Typography variant="subtitle2" color="primary" fontWeight="bold">
+          DASHBOARD PROPERTIES
+        </Typography>
+
+        <TextField
+          label="Dashboard Name"
+          size="small"
+          fullWidth
+          value={name}
+          onChange={(e) => dispatch(updateDashboardMetadata({ name: e.target.value }))}
+          placeholder="Enter dashboard name..."
+        />
+
+        <TextField
+          label="Dashboard Description"
+          size="small"
+          fullWidth
+          multiline
+          rows={3}
+          value={description}
+          onChange={(e) => dispatch(updateDashboardMetadata({ description: e.target.value }))}
+          placeholder="Briefly describe this dashboard..."
+        />
+
+        <Divider />
+        
+        <Box sx={{ p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            Tip: Click on a widget to see its specific properties. Click on the background again to come back here.
+          </Typography>
+        </Box>
       </Box>
     );
   }
