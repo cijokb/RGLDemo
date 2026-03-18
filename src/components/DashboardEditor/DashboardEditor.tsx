@@ -15,7 +15,7 @@ import Canvas from '../Canvas/Canvas';
 import WidgetsSidebar from '../WidgetsSidebar/WidgetsSidebar';
 import PropertiesSidebar from '../PropertiesSidebar/PropertiesSidebar';
 import type { RootState } from '../../store/store';
-import { loadDashboard } from '../../store/dashboardSlice';
+import { loadDashboard, sanitizeLayouts } from '../../store/dashboardSlice';
 
 const DashboardEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,7 +40,7 @@ const DashboardEditor: React.FC = () => {
   const handleSave = () => {
     // Only save layouts and widgets to avoid saving transient state like activeWidgetId
     const dataToSave = {
-      layouts: dashboard.layouts,
+      layouts: sanitizeLayouts(dashboard.layouts),
       widgets: dashboard.widgets,
       name: dashboard.name,
       description: dashboard.description,

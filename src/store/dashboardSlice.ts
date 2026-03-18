@@ -1,5 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
+import type { LayoutItem } from 'react-grid-layout';
 
 export interface WidgetData {
   id: string;
@@ -14,7 +15,7 @@ export interface WidgetData {
 }
 
 interface DashboardState {
-  layouts: { [breakpoint: string]: any[] };
+  layouts: DashboardLayouts;
   widgets: Record<string, WidgetData>;
   widgetData: Record<string, { loading: boolean; data: any | null }>;
   activeWidgetId: string | null;
@@ -22,6 +23,58 @@ interface DashboardState {
   name: string;
   description: string;
 }
+
+export type DashboardLayoutItem = Pick<LayoutItem, 'i' | 'x' | 'y' | 'w' | 'h' | 'minW' | 'minH' | 'maxW' | 'maxH'>;
+export type DashboardLayouts = Record<string, DashboardLayoutItem[]>;
+
+const emptyLayouts = (): DashboardLayouts => ({ lg: [] });
+
+const sanitizeLayoutItem = (item: unknown): DashboardLayoutItem | null => {
+  if (!item || typeof item !== 'object') return null;
+
+  const candidate = item as Partial<LayoutItem>;
+
+  if (
+    typeof candidate.i !== 'string' ||
+    typeof candidate.x !== 'number' ||
+    typeof candidate.y !== 'number' ||
+    typeof candidate.w !== 'number' ||
+    typeof candidate.h !== 'number'
+  ) {
+    return null;
+  }
+
+  return {
+    i: candidate.i,
+    x: candidate.x,
+    y: candidate.y,
+    w: candidate.w,
+    h: candidate.h,
+    minW: typeof candidate.minW === 'number' ? candidate.minW : undefined,
+    minH: typeof candidate.minH === 'number' ? candidate.minH : undefined,
+    maxW: typeof candidate.maxW === 'number' ? candidate.maxW : undefined,
+    maxH: typeof candidate.maxH === 'number' ? candidate.maxH : undefined,
+  };
+};
+
+export const sanitizeLayouts = (layouts: unknown): DashboardLayouts => {
+  if (!layouts || typeof layouts !== 'object') {
+    return emptyLayouts();
+  }
+
+  const sanitized = Object.fromEntries(
+    Object.entries(layouts as Record<string, unknown>).map(([breakpoint, layout]) => [
+      breakpoint,
+      Array.isArray(layout)
+        ? layout
+            .map(sanitizeLayoutItem)
+            .filter((item): item is DashboardLayoutItem => item !== null)
+        : [],
+    ]),
+  ) as DashboardLayouts;
+
+  return Object.keys(sanitized).length > 0 ? sanitized : emptyLayouts();
+};
 
 // Load initial state from localStorage if available
 const loadInitialState = (id: string = 'default'): DashboardState => {
@@ -32,7 +85,7 @@ const loadInitialState = (id: string = 'default'): DashboardState => {
       
       // Ensure all required state keys exist to avoid crashes in components
       return {
-        layouts: parsedState.layouts || { lg: [] },
+        layouts: sanitizeLayouts(parsedState.layouts),
         widgets: parsedState.widgets || {},
         widgetData: parsedState.widgetData || {},
         activeWidgetId: null, // Always reset transient state
@@ -46,7 +99,7 @@ const loadInitialState = (id: string = 'default'): DashboardState => {
   }
   
   return {
-    layouts: { lg: [] },
+    layouts: emptyLayouts(),
     widgets: {},
     widgetData: {},
     activeWidgetId: null,
@@ -62,28 +115,30 @@ export const dashboardSlice = createSlice({
   name: 'dashboard',
   initialState,
   reducers: {
-    addWidget: (state, action: PayloadAction<{ layout: any; widget: WidgetData }>) => {
+    addWidget: (state, action: PayloadAction<{ layout: DashboardLayoutItem; widget: WidgetData }>) => {
       const { layout, widget } = action.payload;
       
       if (!state.layouts.lg) state.layouts.lg = [];
       
       const exists = state.layouts.lg.some(l => l.i === layout.i);
-      if (!exists) {
-        state.layouts.lg.push({ ...layout });
+      const sanitizedLayout = sanitizeLayoutItem(layout);
+
+      if (!exists && sanitizedLayout) {
+        state.layouts.lg.push(sanitizedLayout);
       }
       
       state.widgets[widget.id] = widget;
     },
-    dropWidget: (state, action: PayloadAction<{ breakpoint: string; layout: any[]; widget: WidgetData }>) => {
+    dropWidget: (state, action: PayloadAction<{ breakpoint: string; layout: DashboardLayoutItem[]; widget: WidgetData }>) => {
       const { layout, widget } = action.payload;
       
       // Always store under 'lg' since we use a single breakpoint
-      state.layouts.lg = layout;
+      state.layouts.lg = sanitizeLayouts({ lg: layout }).lg;
       
       state.widgets[widget.id] = widget;
     },
-    updateLayout: (state, action: PayloadAction<{ [key: string]: any[] }>) => {
-      state.layouts = { ...state.layouts, ...action.payload };
+    updateLayout: (state, action: PayloadAction<DashboardLayouts>) => {
+      state.layouts = { ...state.layouts, ...sanitizeLayouts(action.payload) };
     },
     removeWidget: (state, action: PayloadAction<string>) => {
       const id = action.payload;
@@ -131,7 +186,7 @@ export const dashboardSlice = createSlice({
       state.widgetData[action.payload.id] = { loading: false, data: action.payload.data };
     },
     clearDashboard: (state) => {
-      state.layouts = { lg: [] };
+      state.layouts = emptyLayouts();
       state.widgets = {};
       state.widgetData = {};
       state.activeWidgetId = null;
