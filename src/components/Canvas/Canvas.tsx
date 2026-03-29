@@ -3,27 +3,120 @@ import { Responsive, useContainerWidth } from 'react-grid-layout';
 import { verticalCompactor } from 'react-grid-layout/core';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector, useDispatch, shallowEqual } from 'react-redux';
 import type { RootState } from '../../store/store';
-import { updateLayout, dropWidget, setActiveWidget, removeWidget, setDraggedWidgetTemplate, setWidgetLoading, setWidgetData } from '../../store/dashboardSlice';
+import { updateLayout, dropWidget, setActiveWidget, removeWidget, setDraggedWidgetTemplate } from '../../store/dashboardSlice';
 import { Box, Paper, IconButton, Typography } from '@mui/material';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { v4 as uuidv4 } from 'uuid';
-import WidgetRenderer from '../Widgets/WidgetRenderer';
+import LazyWidget from '../Widgets/LazyWidget';
 import widgetsConfig from '../../widgetsConfig.json';
-import { fetchWidgetData } from '../../services/mockApi';
 
 type WidgetConfig = typeof widgetsConfig;
 
-const Canvas: React.FC = () => {
+const WidgetWrapper = React.memo(({ widgetId }: { widgetId: string }) => {
   const dispatch = useDispatch();
-  const { layouts, widgets, widgetData, activeWidgetId, draggedWidgetTemplate } = useSelector((state: RootState) => state.dashboard);
+  const widget = useSelector((state: RootState) => state.dashboard.widgets[widgetId]);
+  const activeWidgetId = useSelector((state: RootState) => state.dashboard.activeWidgetId);
+  
+  if (!widget) return null;
+  const isActive = activeWidgetId === widgetId;
+  const isNonReport = widget.type === 'section_divider' || widget.type === 'landing_page';
 
-  // Deep-clone frozen Immer layouts so v2 RGL can mutate items during drag/resize.
-  // IMPORTANT: structuredClone (not JSON.parse/stringify) preserves undefined properties
-  // (e.g., minW: undefined). v2's deepEqual treats missing keys differently from undefined
-  // values, and will re-compact layouts if properties are dropped, rearranging widgets.
+  const handleWidgetClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    dispatch(setActiveWidget(id));
+  };
+
+  const handleRemove = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    dispatch(removeWidget(id));
+  };
+
+  return (
+    <Paper
+      elevation={isActive ? 6 : 1}
+      sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        overflow: 'hidden', 
+        border: isActive ? '2px solid #1976d2' : '1px solid #e0e0e0', 
+        borderRadius: 2,
+        position: 'relative',
+        '&:hover .overlay-actions': { opacity: 1 }
+      }}
+      onClick={(e) => handleWidgetClick(widget.id, e)}
+    >
+      {isNonReport ? (
+        <>
+          <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+            <LazyWidget widgetId={widget.id} widgetType={widget.type} />
+            {widget.name && (widget.type !== 'landing_page' || !widget.backgroundImage) && (
+                <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: widget.type === 'landing_page' ? 'center' : 'flex-start', px: 2, pointerEvents: 'none' }}>
+                  <Typography 
+                    variant={widget.type === 'landing_page' ? 'h4' : 'subtitle1'} 
+                    fontWeight="bold" 
+                    sx={{ 
+                      color: widget.titleColor || (widget.type === 'landing_page' ? 'white' : 'inherit'), 
+                      textShadow: widget.type === 'landing_page' ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' 
+                    }}
+                  >
+                    {widget.name}
+                  </Typography>
+                </Box>
+            )}
+          </Box>
+          <Box 
+            className="widget-drag-handle overlay-actions" 
+            sx={{ 
+              position: 'absolute', 
+              top: 0, 
+              right: 0, 
+              p: 0.5, 
+              display: 'flex', 
+              alignItems: 'center', 
+              bgcolor: 'rgba(255,255,255,0.8)',
+              borderBottomLeftRadius: 4,
+              opacity: isActive ? 1 : 0,
+              transition: 'opacity 0.2s',
+              cursor: 'move',
+              zIndex: 1
+            }}
+          >
+            <DragIndicatorIcon fontSize="small" sx={{ color: 'text.secondary', mr: 0.5 }} />
+            <IconButton size="small" onClick={(e) => handleRemove(widget.id, e)}>
+              <RemoveCircleOutlineIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </>
+      ) : (
+        <>
+          <Box className="widget-drag-handle" sx={{ p: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', bgcolor: isActive ? '#f0f7ff' : '#fafafa', cursor: 'move' }}>
+            <DragIndicatorIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>{widget.alias || widget.name}</Typography>
+            <IconButton size="small" onClick={(e) => handleRemove(widget.id, e)}><RemoveCircleOutlineIcon fontSize="small" /></IconButton>
+          </Box>
+          <Box sx={{ position: 'relative', flexGrow: 1, overflow: 'hidden' }}>
+            <LazyWidget
+              widgetId={widget.id}
+              widgetType={widget.type}
+            />
+          </Box>
+        </>
+      )}
+    </Paper>
+  );
+});
+
+const Canvas: React.FC = () => {
+  console.log("Rendering Canvas");
+  const dispatch = useDispatch();
+  const layouts = useSelector((state: RootState) => state.dashboard.layouts);
+  const draggedWidgetTemplate = useSelector((state: RootState) => state.dashboard.draggedWidgetTemplate);
+  const widgetIds = useSelector((state: RootState) => Object.keys(state.dashboard.widgets), shallowEqual);
+
   const mutableLayouts = useMemo(() => structuredClone(layouts), [layouts]);
 
   const { width, containerRef, mounted } = useContainerWidth();
@@ -35,10 +128,6 @@ const Canvas: React.FC = () => {
   const onLayoutChange = useCallback((_layout: any, allLayouts: any) => {
     if (isInteractingRef.current || isProcessingDropRef.current || draggedWidgetTemplate) return;
 
-    // Deep-clone all layouts to avoid storing v2's internal references in Redux
-    // (Immer freezes them which breaks RGL mutability).
-    // We filter out the temporary drop placeholder but process ALL breakpoints
-    // so RGL retains accurate sizing and positioning across window resizes.
     const cleanedLayouts: any = {};
     for (const bp in allLayouts) {
       cleanedLayouts[bp] = allLayouts[bp]
@@ -78,7 +167,7 @@ const Canvas: React.FC = () => {
             maxH: config.max.h
           };
         }
-        return { ...l }; // Clone to avoid storing v2's internal refs in Redux
+        return { ...l };
       });
 
       const newWidget = {
@@ -90,7 +179,8 @@ const Canvas: React.FC = () => {
         language: 'EN',
         workspaces: ['Global'],
         active: true,
-        accessLevel: 'Personal' as const
+        accessLevel: 'Personal' as const,
+        backgroundColor: widgetType === 'section_divider' ? '#ffffff' : (widgetType === 'landing_page' ? '#f0f0f0' : undefined)
       };
 
       dispatch(setDraggedWidgetTemplate(null));
@@ -100,16 +190,9 @@ const Canvas: React.FC = () => {
         widget: newWidget
       }));
       dispatch(setActiveWidget(newId));
-
-      // Trigger mock API fetch — shows skeleton loader immediately
-      dispatch(setWidgetLoading(newId));
-      fetchWidgetData(newId, widgetType).then((data) => {
-        dispatch(setWidgetData({ id: newId, data }));
-      });
     } catch (err) {
       console.error("Drop failed", err);
     } finally {
-      // Give RGL one tick to finish its internal state update before we allow onLayoutChange to fire again
       setTimeout(() => {
         isProcessingDropRef.current = false;
       }, 100);
@@ -118,16 +201,6 @@ const Canvas: React.FC = () => {
 
   const onBreakpointChange = (newBreakpoint: string) => {
     setCurrentBreakpoint(newBreakpoint);
-  };
-
-  const handleWidgetClick = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    dispatch(setActiveWidget(id));
-  };
-
-  const handleRemove = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    dispatch(removeWidget(id));
   };
 
   return (
@@ -150,7 +223,6 @@ const Canvas: React.FC = () => {
           onDrop={onDrop}
           onDropDragOver={(_e) => {
             const type = draggedWidgetTemplate?.type as keyof WidgetConfig;
-            // Safety check: Ensure config exists before accessing .default
             const config = (type && widgetsConfig[type]) ? widgetsConfig[type] : { default: { w: 3, h: 6 } };
             return { w: config.default.w, h: config.default.h };
           }}
@@ -161,36 +233,15 @@ const Canvas: React.FC = () => {
           onResizeStop={() => { isInteractingRef.current = false; }}
           style={{ minHeight: '80vh' }}
         >
-          {Object.values(widgets).map((widget) => {
-            const isActive = activeWidgetId === widget.id;
-
-            return (
-              <div key={widget.id}>
-                <Paper
-                  elevation={isActive ? 6 : 1}
-                  sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: isActive ? '2px solid #1976d2' : '1px solid #e0e0e0', borderRadius: 2 }}
-                  onClick={(e) => handleWidgetClick(widget.id, e)}
-                >
-                  <Box className="widget-drag-handle" sx={{ p: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', bgcolor: isActive ? '#f0f7ff' : '#fafafa', cursor: 'move' }}>
-                    <DragIndicatorIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                    <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>{widget.alias || widget.name}</Typography>
-                    <IconButton size="small" onClick={(e) => handleRemove(widget.id, e)}><RemoveCircleOutlineIcon fontSize="small" /></IconButton>
-                  </Box>
-                  <Box sx={{ position: 'relative', flexGrow: 1, overflow: 'hidden' }}>
-                    <WidgetRenderer
-                      type={widget.type}
-                      loading={widgetData[widget.id]?.loading}
-                      data={widgetData[widget.id]?.data}
-                    />
-                  </Box>
-                </Paper>
-              </div>
-            );
-          })}
+          {widgetIds.map((id) => (
+            <div key={id}>
+              <WidgetWrapper widgetId={id} />
+            </div>
+          ))}
         </Responsive>
       )}
     </Box>
   );
 };
 
-export default Canvas;
+export default React.memo(Canvas);

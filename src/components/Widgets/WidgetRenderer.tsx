@@ -1,4 +1,4 @@
-import React, { Component, useMemo } from 'react';
+import React, { Component, useMemo, useCallback } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
@@ -6,9 +6,13 @@ import sankey from 'highcharts/modules/sankey';
 import heatmap from 'highcharts/modules/heatmap';
 import more from 'highcharts/highcharts-more';
 import funnel from 'highcharts/modules/funnel';
+import drilldown from 'highcharts/modules/drilldown';
 import accessibility from 'highcharts/modules/accessibility';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination } from '@mui/material';
+import { useDispatch, useSelector } from 'react-redux';
 import WidgetSkeleton from './WidgetSkeleton';
+import type { RootState } from '../../store/store';
+import { updateWidgetUIState } from '../../store/dashboardSlice';
 
 // Helper to handle ESM/CJS module interop for Highcharts modules
 function initializeHighchartsModule(mod: any, hc: typeof Highcharts) {
@@ -20,10 +24,11 @@ function initializeHighchartsModule(mod: any, hc: typeof Highcharts) {
 
 // Initialize Highcharts modules
 if (typeof Highcharts === 'object') {
+  initializeHighchartsModule(more, Highcharts);
   initializeHighchartsModule(sankey, Highcharts);
   initializeHighchartsModule(heatmap, Highcharts);
-  initializeHighchartsModule(more, Highcharts);
   initializeHighchartsModule(funnel, Highcharts);
+  initializeHighchartsModule(drilldown, Highcharts);
   initializeHighchartsModule(accessibility, Highcharts);
 }
 
@@ -31,9 +36,12 @@ if (typeof Highcharts === 'object') {
 const HighchartsReactComponent = (HighchartsReact as any)?.default || HighchartsReact;
 
 interface WidgetRendererProps {
+  widgetId: string;
   type: string;
   loading?: boolean;
   data?: any;
+  backgroundColor?: string;
+  backgroundImage?: string;
 }
 
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: string}> {
@@ -52,84 +60,75 @@ class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean,
   }
 }
 
-// --- Fallback hardcoded data (used when no mock data has been fetched yet) ---
+// --- Fallback hardcoded data ---
 
-const fallbackTableData = [
-  { id: 1, finding: 'User passwords not expiring', risk: 'High', status: 'Open' },
-  { id: 2, finding: 'Lack of MFA for admin accounts', risk: 'High', status: 'In Progress' },
-  { id: 3, finding: 'Outdated server software', risk: 'Medium', status: 'Open' },
-  { id: 4, finding: 'No firewall on development network', risk: 'Low', status: 'Closed' },
-  { id: 5, finding: 'Excessive user permissions', risk: 'Medium', status: 'Open' },
-];
+const fallbackTableData = Array.from({ length: 15 }, (_, i) => ({
+  id: i + 1,
+  finding: `Fallback Finding #${i + 1}`,
+  risk: i % 3 === 0 ? 'High' : (i % 2 === 0 ? 'Medium' : 'Low'),
+  status: i % 4 === 0 ? 'Closed' : 'Open'
+}));
 
-const WidgetContent: React.FC<WidgetRendererProps> = ({ type, loading, data }) => {
-  // --- Loading state: show skeleton ---
-  if (loading) {
-    return <WidgetSkeleton type={type} />;
-  }
+const EMPTY_UI_STATE = {};
 
-  // --- Metric widget ---
-  if (type === 'metric') {
-    const metricValue = data?.value ?? '42,000';
-    const metricLabel = data?.label ?? 'Total Audits Completed';
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <Typography variant="h3" color="primary" fontWeight="bold">{metricValue}</Typography>
-        <Typography variant="body2" color="text.secondary">{metricLabel}</Typography>
-      </Box>
-    );
-  }
+const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading, data, backgroundColor, backgroundImage }) => {
+  const dispatch = useDispatch();
+  
+  // Select ONLY the state for this specific widgetId
+  const uiState = useSelector((state: RootState) => state.dashboard.widgetUIState[widgetId] || EMPTY_UI_STATE);
+  
+  // --- Pagination Hook (Always defined at top level) ---
+  const handleChangePage = useCallback((_: any, newPage: number) => {
+    dispatch(updateWidgetUIState({ id: widgetId, state: { page: newPage } }));
+  }, [dispatch, widgetId]);
 
-  // --- Table widget ---
-  if (type === 'table') {
-    const rows = data?.rows ?? fallbackTableData;
-    return (
-      <TableContainer component={Paper} sx={{ height: '100%' }}>
-        <Table stickyHeader size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Finding</TableCell>
-              <TableCell>Risk</TableCell>
-              <TableCell>Status</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row: any) => (
-              <TableRow key={row.id} hover>
-                <TableCell>{row.finding}</TableCell>
-                <TableCell>{row.risk}</TableCell>
-                <TableCell>{row.status}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  }
-
-  // --- Chart widgets ---
+  // --- Highcharts Options Hook (Always defined at top level) ---
   const options: Highcharts.Options | null = useMemo(() => {
+    // Only calculate options if it's not a table/divider/metric
+    if (type.startsWith('table') || type === 'section_divider' || type.startsWith('metric') || type === 'landing_page') {
+      return null;
+    }
+
     let opt: Highcharts.Options = {
       credits: { enabled: false },
       chart: { animation: false },
       title: { text: undefined },
     };
 
-    // If we have fetched data from the mock API, use it
     if (data) {
       const chartType = data.chartType || type;
       opt.chart = {
         ...opt.chart,
-        type: chartType === 'radar' ? 'line' : chartType,
+        type: (chartType === 'radar' ? 'line' : chartType) as any,
         ...(chartType === 'radar' ? { polar: true } : {}),
         ...(chartType === 'heatmap' ? { styledMode: false } : {}),
+        events: {
+          drilldown: (e: any) => {
+            dispatch(updateWidgetUIState({ id: widgetId, state: { drilldownId: e.point.drilldown } }));
+          },
+          drillup: () => {
+            dispatch(updateWidgetUIState({ id: widgetId, state: { drilldownId: null } }));
+          }
+        }
       };
-      if (data.xAxis) opt.xAxis = data.xAxis;
-      if (data.yAxis) opt.yAxis = data.yAxis;
-      if (data.colorAxis) opt.colorAxis = data.colorAxis;
-      opt.series = data.series;
+      // Deep clone data from Redux to prevent "object is not extensible" errors from Highcharts mutations
+      const safeData = JSON.parse(JSON.stringify(data));
+
+      if (safeData.xAxis) opt.xAxis = safeData.xAxis;
+      if (safeData.yAxis) opt.yAxis = safeData.yAxis;
+      if (safeData.colorAxis) opt.colorAxis = safeData.colorAxis;
+      if (safeData.drilldown) opt.drilldown = safeData.drilldown;
+      opt.series = safeData.series;
+
+      // Persistence: Restore drilldown state if it exists
+      if (uiState.drilldownId && safeData.drilldown?.series) {
+        const subSeries = safeData.drilldown.series.find((s: any) => s.id === uiState.drilldownId);
+        if (subSeries) {
+          opt.series = [subSeries];
+        }
+      }
     } else {
-      // Fallback: hardcoded data (for widgets added before this feature)
+      // Hardcoded fallback logic
       if (type === 'bar') {
         opt = { ...opt, chart: { type: 'column' }, series: [{ type: 'column', name: 'Audits', data: [12, 23, 15, 30] }] };
       } else if (type === 'pie') {
@@ -152,25 +151,128 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ type, loading, data }) =
     }
 
     if (!opt.series) return null;
-
-    // IMPORTANT: Highcharts modifies the options object internally.
-    // If we pass an object from Redux/Immer, it's frozen, causing "not extensible" errors.
-    // We deep-clone the final options object before handing it to Highcharts.
-    return structuredClone(opt);
-  }, [type, data]);
+    return opt;
+  }, [type, data, widgetId, dispatch, uiState.drilldownId]);
 
   const containerProps = useMemo(() => ({ 
     style: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as React.CSSProperties 
   }), []);
 
+  // --- Rendering Logic ---
+
+  if (loading && !data) {
+    return <WidgetSkeleton type={type} />;
+  }
+
+  if (type === 'landing_page') {
+    return (
+      <Box sx={{ 
+        height: '100%', 
+        width: '100%',
+        backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        bgcolor: backgroundColor || '#f0f0f0',
+        position: 'relative'
+      }}>
+        {/* Semi-transparent overlay to ensure text readability */}
+        <Box sx={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          bgcolor: 'rgba(0,0,0,0.4)',
+          zIndex: 0
+        }} />
+      </Box>
+    );
+  }
+
+  if (type === 'section_divider') {
+    return (
+      <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', px: 2, bgcolor: backgroundColor || '#ffffff' }} />
+    );
+  }
+
+  if (type.startsWith('metric')) {
+    const metricValue = data?.value ?? '42,000';
+    const metricLabel = data?.label ?? 'Total Audits Completed';
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Typography variant="h3" color="primary" fontWeight="bold">{metricValue}</Typography>
+        <Typography variant="body2" color="text.secondary">{metricLabel}</Typography>
+      </Box>
+    );
+  }
+
+  if (type.startsWith('table')) {
+    const rows = data?.rows ?? fallbackTableData;
+    const page = uiState.page || 0;
+    const rowsPerPage = 5;
+    const paginatedRows = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TableContainer sx={{ flexGrow: 1, overflowY: 'auto' }}>
+          <Table stickyHeader size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ py: 0.5 }}>Finding</TableCell>
+                <TableCell sx={{ py: 0.5 }}>Risk</TableCell>
+                <TableCell sx={{ py: 0.5 }}>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {paginatedRows.map((row: any) => (
+                <TableRow key={row.id} hover>
+                  <TableCell sx={{ py: 0.5 }}>{row.finding}</TableCell>
+                  <TableCell sx={{ py: 0.5 }}>{row.risk}</TableCell>
+                  <TableCell sx={{ py: 0.5 }}>{row.status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <TablePagination
+          rowsPerPageOptions={[5]}
+          component="div"
+          count={rows.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          size="small"
+          sx={{ 
+            flexShrink: 0,
+            borderTop: '1px solid', 
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            '& .MuiTablePagination-toolbar': {
+              justifyContent: 'center',
+              minHeight: '36px',
+              px: 1,
+              pr: 4 // Space for resize handle
+            },
+            '& .MuiTablePagination-spacer': {
+              display: 'none'
+            },
+            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-select': {
+              display: 'none'
+            }
+          }}
+        />
+      </Box>
+    );
+  }
+
   if (!options) return null;
 
   return (
-    <Box sx={{ position: 'absolute', top: 8, bottom: 8, left: 0, right: 0 }}>
-      <HighchartsReactComponent 
-        highcharts={Highcharts} 
-        options={options} 
-        containerProps={containerProps} 
+    <Box sx={{ height: '100%', width: '100%', position: 'relative' }}>
+      <HighchartsReactComponent
+        highcharts={Highcharts}
+        options={options}
+        containerProps={containerProps}
       />
     </Box>
   );

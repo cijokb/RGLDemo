@@ -11,12 +11,16 @@ export interface WidgetData {
   workspaces: string[];
   active: boolean;
   accessLevel: 'Personal' | 'Global';
+  backgroundColor?: string;
+  backgroundImage?: string;
+  titleColor?: string;
 }
 
 interface DashboardState {
   layouts: { [breakpoint: string]: any[] };
   widgets: Record<string, WidgetData>;
   widgetData: Record<string, { loading: boolean; data: any | null }>;
+  widgetUIState: Record<string, any>; // Stores pagination, sorting, etc.
   activeWidgetId: string | null;
   draggedWidgetTemplate: { type: string; name: string } | null;
   name: string;
@@ -35,6 +39,7 @@ const loadInitialState = (id: string = 'default'): DashboardState => {
         layouts: parsedState.layouts || { lg: [] },
         widgets: parsedState.widgets || {},
         widgetData: parsedState.widgetData || {},
+        widgetUIState: parsedState.widgetUIState || {},
         activeWidgetId: null, // Always reset transient state
         draggedWidgetTemplate: null,
         name: parsedState.name || (id === 'default' ? 'New Dashboard' : `Dashboard ${id}`),
@@ -49,6 +54,7 @@ const loadInitialState = (id: string = 'default'): DashboardState => {
     layouts: { lg: [] },
     widgets: {},
     widgetData: {},
+    widgetUIState: {},
     activeWidgetId: null,
     draggedWidgetTemplate: null,
     name: 'New Dashboard',
@@ -115,6 +121,8 @@ export const dashboardSlice = createSlice({
       state.widgetData = {};
       state.activeWidgetId = null;
       state.draggedWidgetTemplate = null;
+      state.name = saved.name;
+      state.description = saved.description;
     },
     loadDashboard: (state, action: PayloadAction<string>) => {
       const saved = loadInitialState(action.payload);
@@ -123,12 +131,18 @@ export const dashboardSlice = createSlice({
       state.widgetData = {};
       state.activeWidgetId = null;
       state.draggedWidgetTemplate = null;
+      state.name = saved.name;
+      state.description = saved.description;
     },
     setWidgetLoading: (state, action: PayloadAction<string>) => {
       state.widgetData[action.payload] = { loading: true, data: null };
     },
     setWidgetData: (state, action: PayloadAction<{ id: string; data: any }>) => {
       state.widgetData[action.payload.id] = { loading: false, data: action.payload.data };
+    },
+    updateWidgetUIState: (state, action: PayloadAction<{ id: string; state: any }>) => {
+      const { id, state: newState } = action.payload;
+      state.widgetUIState[id] = { ...(state.widgetUIState[id] || {}), ...newState };
     },
     clearDashboard: (state) => {
       state.layouts = { lg: [] };
@@ -158,6 +172,7 @@ export const {
   loadDashboard,
   setWidgetLoading,
   setWidgetData,
+  updateWidgetUIState,
   clearDashboard,
   updateDashboardMetadata,
 } = dashboardSlice.actions;
