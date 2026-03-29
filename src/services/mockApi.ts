@@ -2,11 +2,11 @@
  * Mock API Service
  * Simulates server-side data fetching for dashboard widgets.
  * Each widget type returns realistic chart/table/metric data
- * after a randomized delay (1–3 seconds).
+ * after a randomized delay (0.5–1.5 seconds).
  */
 
 // Randomize delay between min and max ms
-const randomDelay = (min = 3000, max = 4000): number =>
+const randomDelay = (min = 500, max = 1500): number =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
 // --- Mock Data Generators ---
@@ -140,7 +140,7 @@ const generateFunnelData = () => ({
   ],
 });
 
-const generateTableData = () => {
+const generateTableData = (labelOverride?: string) => {
   const findings = [
     'User passwords not expiring',
     'Lack of MFA for admin accounts',
@@ -154,19 +154,19 @@ const generateTableData = () => {
   const risks = ['High', 'Medium', 'Low', 'Critical'];
   const statuses = ['Open', 'In Progress', 'Closed', 'Under Review'];
 
-  const count = Math.floor(Math.random() * 4) + 4; // 4–7 rows
+  const count = 25; // Increase to 25 rows to properly test pagination
   return {
     dataType: 'table',
     rows: Array.from({ length: count }, (_, i) => ({
       id: i + 1,
-      finding: findings[Math.floor(Math.random() * findings.length)],
+      finding: `${labelOverride || 'Finding'} #${i + 1}: ${findings[Math.floor(Math.random() * findings.length)]}`,
       risk: risks[Math.floor(Math.random() * risks.length)],
       status: statuses[Math.floor(Math.random() * statuses.length)],
     })),
   };
 };
 
-const generateMetricData = () => {
+const generateMetricData = (labelOverride?: string) => {
   const labels = [
     'Total Audits Completed',
     'Open Findings',
@@ -178,13 +178,74 @@ const generateMetricData = () => {
   return {
     dataType: 'metric',
     value: value.toLocaleString(),
-    label: labels[Math.floor(Math.random() * labels.length)],
+    label: labelOverride || labels[Math.floor(Math.random() * labels.length)],
   };
 };
 
+const generateDrilldownData = () => ({
+  chartType: 'column',
+  series: [
+    {
+      name: 'Devices',
+      colorByPoint: true,
+      data: [
+        { name: 'Desktop', y: 60, drilldown: 'desktop-browsers' },
+        { name: 'Mobile', y: 35, drilldown: 'mobile-browsers' },
+        { name: 'Tablet', y: 5, drilldown: 'tablet-browsers' }
+      ]
+    }
+  ],
+  drilldown: {
+    breadcrumbs: { position: { align: 'right' } },
+    series: [
+      // Level 2: Desktop Browsers
+      {
+        id: 'desktop-browsers',
+        name: 'Desktop Browsers',
+        data: [
+          { name: 'Chrome', y: 40, drilldown: 'chrome-versions' },
+          { name: 'Firefox', y: 15, drilldown: 'firefox-versions' },
+          { name: 'Safari', y: 5, drilldown: 'safari-versions' }
+        ]
+      },
+      // Level 2: Mobile Browsers
+      {
+        id: 'mobile-browsers',
+        name: 'Mobile Browsers',
+        data: [
+          { name: 'Chrome Mobile', y: 25, drilldown: 'chrome-versions' },
+          { name: 'Safari Mobile', y: 10, drilldown: 'safari-versions' }
+        ]
+      },
+      // Level 3: Versions (Shared for demo)
+      {
+        id: 'chrome-versions',
+        name: 'Chrome Versions',
+        data: [
+          ['v90.0', 10], ['v89.0', 20], ['v88.0', 10]
+        ]
+      },
+      {
+        id: 'firefox-versions',
+        name: 'Firefox Versions',
+        data: [
+          ['v85.0', 5], ['v84.0', 7], ['v83.0', 3]
+        ]
+      },
+      {
+        id: 'safari-versions',
+        name: 'Safari Versions',
+        data: [
+          ['v14.0', 4], ['v13.1', 1]
+        ]
+      }
+    ]
+  }
+});
+
 // --- Generator Map ---
 
-const dataGenerators: Record<string, () => any> = {
+const dataGenerators: Record<string, (labelOverride?: string) => any> = {
   bar: generateBarData,
   pie: generatePieData,
   line: generateLineData,
@@ -195,28 +256,44 @@ const dataGenerators: Record<string, () => any> = {
   funnel: generateFunnelData,
   table: generateTableData,
   metric: generateMetricData,
+  drilldown: generateDrilldownData,
 };
 
 // --- Public API ---
 
 /**
  * Fetches mock widget data for a given widget type.
- * Simulates a network call with a randomized 1–3 second delay.
+ * Simulates a network call with a randomized 0.5–1.5 second delay.
  *
- * @param _widgetId - The unique widget instance ID (for future use / caching)
+ * @param widgetId - The unique widget instance ID (for future use / caching)
  * @param widgetType - The widget type key (e.g. 'bar', 'pie', 'table')
+ * @param widgetName - Optional name to use as a label for metrics/tables
  * @returns Promise resolving to mock data appropriate for the widget type
  */
-export const fetchWidgetData = (
-  _widgetId: string,
-  widgetType: string
+export const fetchWidgetData = async (
+  widgetId: string,
+  widgetType: string,
+  widgetName?: string
 ): Promise<any> => {
+  // Trigger a real fetch request so it's visible in the Chrome Network tab.
+  try {
+    await fetch(`/api/widgets/${widgetId}?type=${widgetType}`).catch(() => {});
+  } catch (e) {
+    // Silent catch
+  }
+
   return new Promise((resolve) => {
     const delay = randomDelay();
     setTimeout(() => {
-      const generator = dataGenerators[widgetType];
+      // Handle metric and table variations
+      let typeToUse = widgetType;
+      if (widgetType.startsWith('metric')) typeToUse = 'metric';
+      else if (widgetType.startsWith('table')) typeToUse = 'table';
+      
+      const generator = dataGenerators[typeToUse];
       if (generator) {
-        resolve(generator());
+        // Pass widgetName as label override
+        resolve(generator(widgetName));
       } else {
         // Fallback: return a bar chart
         resolve(generateBarData());

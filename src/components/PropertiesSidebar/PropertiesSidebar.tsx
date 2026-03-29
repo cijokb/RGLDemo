@@ -1,17 +1,19 @@
 import React from 'react';
-import { Box, Typography, TextField, MenuItem, FormControlLabel, Switch, Radio, RadioGroup, Select, FormControl, InputLabel, Divider } from '@mui/material';
+import { Box, Typography, TextField, Divider } from '@mui/material';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { updateWidgetProperties, updateDashboardMetadata } from '../../store/dashboardSlice';
 
-const languages = ['EN', 'ES', 'FR', 'DE'];
-const workspacesList = ['Global', 'Finance', 'HR', 'IT'];
-
 const PropertiesSidebar: React.FC = () => {
-  const dispatch = useDispatch();
-  const { activeWidgetId, widgets, name, description } = useSelector((state: RootState) => state.dashboard);
+  console.log("Rendering PropertiesSidebar");
 
-  if (!activeWidgetId || !widgets[activeWidgetId]) {
+  const dispatch = useDispatch();
+  const activeWidgetId = useSelector((state: RootState) => state.dashboard.activeWidgetId);
+  const widget = useSelector((state: RootState) => activeWidgetId ? state.dashboard.widgets[activeWidgetId] : null);
+  const name = useSelector((state: RootState) => state.dashboard.name);
+  const description = useSelector((state: RootState) => state.dashboard.description);
+
+  if (!activeWidgetId || !widget) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         <Typography variant="subtitle2" color="primary" fontWeight="bold">
@@ -49,7 +51,9 @@ const PropertiesSidebar: React.FC = () => {
     );
   }
 
-  const widget = widgets[activeWidgetId];
+  const isDivider = widget.type === 'section_divider';
+  const isLandingPage = widget.type === 'landing_page';
+  const isNonReport = isDivider || isLandingPage;
 
   const handleChange = (field: string, value: any) => {
     dispatch(updateWidgetProperties({ id: activeWidgetId, properties: { [field]: value } }));
@@ -58,78 +62,91 @@ const PropertiesSidebar: React.FC = () => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Typography variant="subtitle2" color="primary" fontWeight="bold">
-        {widget.type.toUpperCase()} COMPONENTS
+        {widget.type.toUpperCase().replace('_', ' ')} COMPONENTS
       </Typography>
 
       <TextField
-        label="Name"
+        label={isNonReport ? "Title (Optional)" : "Name"}
         size="small"
         fullWidth
         value={widget.name}
         onChange={(e) => handleChange('name', e.target.value)}
       />
 
-      <TextField
-        label="Alias"
-        size="small"
-        fullWidth
-        value={widget.alias}
-        onChange={(e) => handleChange('alias', e.target.value)}
-      />
+      {isLandingPage && (
+        <TextField
+          label="Background Image URL"
+          size="small"
+          fullWidth
+          value={widget.backgroundImage || ''}
+          onChange={(e) => handleChange('backgroundImage', e.target.value)}
+          placeholder="https://example.com/image.jpg"
+        />
+      )}
 
-      <TextField
-        label="Description"
-        size="small"
-        fullWidth
-        multiline
-        rows={3}
-        value={widget.description}
-        onChange={(e) => handleChange('description', e.target.value)}
-      />
+      {isDivider && (
+        <>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="caption" color="text.secondary">Background Color</Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <input 
+                type="color" 
+                value={widget.backgroundColor || '#ffffff'} 
+                onChange={(e) => handleChange('backgroundColor', e.target.value)}
+                style={{ width: '40px', height: '40px', padding: 0, border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}
+              />
+              <TextField
+                size="small"
+                value={widget.backgroundColor || '#ffffff'}
+                onChange={(e) => handleChange('backgroundColor', e.target.value)}
+                sx={{ flexGrow: 1 }}
+              />
+            </Box>
+          </Box>
 
-      <FormControl size="small" fullWidth>
-        <InputLabel>Language</InputLabel>
-        <Select
-          value={widget.language}
-          label="Language"
-          onChange={(e) => handleChange('language', e.target.value)}
-        >
-          {languages.map(lang => <MenuItem key={lang} value={lang}>{lang}</MenuItem>)}
-        </Select>
-      </FormControl>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="caption" color="text.secondary">Title Color</Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <input 
+                type="color" 
+                value={widget.titleColor || '#000000'} 
+                onChange={(e) => handleChange('titleColor', e.target.value)}
+                style={{ width: '40px', height: '40px', padding: 0, border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}
+              />
+              <TextField
+                size="small"
+                value={widget.titleColor || '#000000'}
+                onChange={(e) => handleChange('titleColor', e.target.value)}
+                sx={{ flexGrow: 1 }}
+              />
+            </Box>
+          </Box>
+        </>
+      )}
 
-      <FormControl size="small" fullWidth>
-        <InputLabel>Workspaces</InputLabel>
-        <Select
-          multiple
-          value={widget.workspaces}
-          label="Workspaces"
-          onChange={(e) => handleChange('workspaces', typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-        >
-          {workspacesList.map(ws => <MenuItem key={ws} value={ws}>{ws}</MenuItem>)}
-        </Select>
-      </FormControl>
+      {!isNonReport && (
+        <>
+          <TextField
+            label="Alias"
+            size="small"
+            fullWidth
+            value={widget.alias}
+            onChange={(e) => handleChange('alias', e.target.value)}
+          />
 
-      <Divider />
-
-      <FormControlLabel
-        control={<Switch checked={widget.active} onChange={(e) => handleChange('active', e.target.checked)} />}
-        label="Active"
-      />
-
-      <Box>
-        <Typography variant="caption" color="text.secondary">Access Level</Typography>
-        <RadioGroup
-          row
-          value={widget.accessLevel}
-          onChange={(e) => handleChange('accessLevel', e.target.value)}
-        >
-          <FormControlLabel value="Personal" control={<Radio size="small" />} label="Personal" />
-          <FormControlLabel value="Global" control={<Radio size="small" />} label="Global" />
-        </RadioGroup>
-      </Box>
+          <TextField
+            label="Description"
+            size="small"
+            fullWidth
+            multiline
+            rows={3}
+            value={widget.description}
+            onChange={(e) => handleChange('description', e.target.value)}
+          />
+        </>
+      )}
     </Box>
   );
 };
 
-export default PropertiesSidebar;
+export default React.memo(PropertiesSidebar);

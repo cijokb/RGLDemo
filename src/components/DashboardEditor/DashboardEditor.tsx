@@ -8,7 +8,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MenuIcon from '@mui/icons-material/Menu';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch, useSelector, useStore } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import Canvas from '../Canvas/Canvas';
@@ -25,8 +25,11 @@ const DashboardEditor: React.FC = () => {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
+  console.log("Rendering DashboardEditor");
+
   const dispatch = useDispatch();
-  const dashboard = useSelector((state: RootState) => state.dashboard);
+  const store = useStore<RootState>();
+  const name = useSelector((state: RootState) => state.dashboard.name);
 
   // Load dashboard data when the ID changes
   useEffect(() => {
@@ -39,6 +42,7 @@ const DashboardEditor: React.FC = () => {
 
   const handleSave = () => {
     // Only save layouts and widgets to avoid saving transient state like activeWidgetId
+    const dashboard = store.getState().dashboard;
     const dataToSave = {
       layouts: dashboard.layouts,
       widgets: dashboard.widgets,
@@ -113,7 +117,7 @@ const DashboardEditor: React.FC = () => {
         }}
       >
         <Box sx={{ px: 3, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#ffffff', borderBottom: 1, borderColor: 'divider', minHeight: '48px' }}>
-          <Typography variant="h6" fontWeight="bold">{dashboard.name}</Typography>
+          <Typography variant="h6" fontWeight="bold">{name}</Typography>
 
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Button

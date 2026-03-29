@@ -9,7 +9,7 @@ import 'react-resizable/css/styles.css';
 
 import type { RootState } from '../../store/store';
 import { loadDashboard } from '../../store/dashboardSlice';
-import WidgetRenderer from '../Widgets/WidgetRenderer';
+import LazyWidget from '../Widgets/LazyWidget';
 
 const DashboardViewer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,7 +17,7 @@ const DashboardViewer: React.FC = () => {
   const dashboardId = id || 'default';
 
   const dispatch = useDispatch();
-  const { layouts, widgets, widgetData, name } = useSelector((state: RootState) => state.dashboard);
+  const { layouts, widgets, name } = useSelector((state: RootState) => state.dashboard);
   
   const { width, containerRef, mounted } = useContainerWidth();
 
@@ -55,25 +55,59 @@ const DashboardViewer: React.FC = () => {
             dragConfig={{ enabled: false }}
             resizeConfig={{ enabled: false }}
           >
-            {Object.values(widgets).map((widget) => (
-              <div key={widget.id}>
-                <Paper
-                  elevation={1}
-                  sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid #e0e0e0', borderRadius: 2 }}
-                >
-                  <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider', bgcolor: '#fafafa' }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>{widget.alias || widget.name}</Typography>
-                  </Box>
-                  <Box sx={{ position: 'relative', flexGrow: 1, overflow: 'hidden' }}>
-                    <WidgetRenderer
-                      type={widget.type}
-                      loading={widgetData[widget.id]?.loading}
-                      data={widgetData[widget.id]?.data}
-                    />
-                  </Box>
-                </Paper>
-              </div>
-            ))}
+            {Object.values(widgets).map((widget) => {
+              const isNonReport = widget.type === 'section_divider' || widget.type === 'landing_page';
+
+              return (
+                <div key={widget.id}>
+                  <Paper
+                    elevation={isNonReport ? 0 : 1}
+                    sx={{ 
+                      height: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      overflow: 'hidden', 
+                      border: isNonReport ? 'none' : '1px solid #e0e0e0', 
+                      borderRadius: isNonReport ? 0 : 2,
+                      bgcolor: isNonReport ? 'transparent' : '#ffffff',
+                      position: 'relative'
+                    }}
+                  >
+                    {isNonReport ? (
+                      <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                        <LazyWidget widgetId={widget.id} widgetType={widget.type} />
+                        {widget.name && (widget.type !== 'landing_page' || !widget.backgroundImage) && (
+                           <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: widget.type === 'landing_page' ? 'center' : 'flex-start', px: 2, pointerEvents: 'none' }}>
+                             <Typography 
+                               variant={widget.type === 'landing_page' ? 'h4' : 'subtitle1'} 
+                               fontWeight="bold" 
+                               sx={{ 
+                                 color: widget.titleColor || (widget.type === 'landing_page' ? 'white' : 'inherit'), 
+                                 textShadow: widget.type === 'landing_page' ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' 
+                               }}
+                             >
+                               {widget.name}
+                             </Typography>
+                           </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <>
+                        <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider', bgcolor: '#fafafa' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>{widget.alias || widget.name}</Typography>
+                        </Box>
+                        <Box sx={{ position: 'relative', flexGrow: 1, overflow: 'hidden' }}>
+                          <LazyWidget
+                            widgetId={widget.id}
+                            widgetType={widget.type}
+                          />
+                        </Box>
+                      </>
+                    )}
+                  </Paper>
+                </div>
+              );
+            })}
           </Responsive>
         )}
       </Box>
