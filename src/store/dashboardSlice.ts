@@ -25,6 +25,7 @@ interface DashboardState {
   draggedWidgetTemplate: { type: string; name: string } | null;
   name: string;
   description: string;
+  isExporting: boolean;
 }
 
 // Load initial state from localStorage if available
@@ -44,6 +45,7 @@ const loadInitialState = (id: string = 'default'): DashboardState => {
         draggedWidgetTemplate: null,
         name: parsedState.name || (id === 'default' ? 'New Dashboard' : `Dashboard ${id}`),
         description: parsedState.description || '',
+        isExporting: false,
       };
     }
   } catch (err) {
@@ -59,6 +61,7 @@ const loadInitialState = (id: string = 'default'): DashboardState => {
     draggedWidgetTemplate: null,
     name: 'New Dashboard',
     description: '',
+    isExporting: false,
   };
 };
 
@@ -157,6 +160,9 @@ export const dashboardSlice = createSlice({
       if (action.payload.name !== undefined) state.name = action.payload.name;
       if (action.payload.description !== undefined) state.description = action.payload.description;
     },
+    setExporting: (state, action: PayloadAction<boolean>) => {
+      state.isExporting = action.payload;
+    },
   },
 });
 
@@ -175,6 +181,7 @@ export const {
   updateWidgetUIState,
   clearDashboard,
   updateDashboardMetadata,
+  setExporting,
 } = dashboardSlice.actions;
 
 export default dashboardSlice.reducer;
