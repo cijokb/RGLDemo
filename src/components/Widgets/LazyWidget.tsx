@@ -14,10 +14,10 @@ interface LazyWidgetProps {
 }
 
 const LazyWidget: React.FC<LazyWidgetProps> = ({ widgetId, widgetType }) => {
-  console.log(`Rendering LazyWidget: ${widgetId}`);
   const dispatch = useDispatch();
   const widget = useSelector((state: RootState) => state.dashboard.widgets[widgetId]);
   const widgetState = useSelector((state: RootState) => state.dashboard.widgetData[widgetId]);
+  const isExporting = useSelector((state: RootState) => state.dashboard.isExporting);
   
   const isNonReport = widgetType === 'section_divider' || widgetType === 'landing_page';
 
@@ -31,27 +31,31 @@ const LazyWidget: React.FC<LazyWidgetProps> = ({ widgetId, widgetType }) => {
   // Stagger chart rendering so 20 Highcharts instances don't freeze the router transition
   const [isChartReady, setIsChartReady] = useState(false);
 
+  // When exporting, force all charts to be ready immediately
+  const effectiveInView = inView || isExporting;
+  const effectiveChartReady = isChartReady || isExporting;
+
   useEffect(() => {
     // Non-report widgets don't need data fetching
     if (isNonReport) return;
 
-    if (inView) {
+    if (effectiveInView) {
       // Small timeout allows the browser to paint the skeleton frame first so router transitions feel instant
       const deferTimer = setTimeout(() => {
         setIsChartReady(true);
-      }, 50 + (Math.random() * 200)); 
+      }, isExporting ? 0 : 50 + (Math.random() * 200)); 
 
       return () => clearTimeout(deferTimer);
     } else {
       setIsChartReady(false);
     }
-  }, [inView, isNonReport]);
+  }, [effectiveInView, isNonReport, isExporting]);
 
   useEffect(() => {
     if (isNonReport) return;
 
     // Only fetch if chart is conceptually ready to be viewed and data wasn't requested
-    if (isChartReady && !widgetState) {
+    if (effectiveChartReady && !widgetState) {
       const loadData = async () => {
         dispatch(setWidgetLoading(widgetId));
         try {
@@ -63,7 +67,7 @@ const LazyWidget: React.FC<LazyWidgetProps> = ({ widgetId, widgetType }) => {
       };
       loadData();
     }
-  }, [isChartReady, widgetId, widgetType, widgetState, dispatch, isNonReport, widget?.name]);
+  }, [effectiveChartReady, widgetId, widgetType, widgetState, dispatch, isNonReport, widget?.name]);
 
   return (
     <Box ref={ref} sx={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -74,7 +78,7 @@ const LazyWidget: React.FC<LazyWidgetProps> = ({ widgetId, widgetType }) => {
           backgroundColor={widget?.backgroundColor}
           backgroundImage={widget?.backgroundImage}
         />
-      ) : isChartReady ? (
+      ) : effectiveChartReady ? (
         <WidgetRenderer
           widgetId={widgetId}
           type={widgetType}
