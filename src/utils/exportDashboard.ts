@@ -65,7 +65,6 @@ export async function exportDashboardToPDF(
   });
 
   const imgWidth = canvas.width;
-  const imgHeight = canvas.height;
   const scaleFactor = 2; // matches html2canvas scale
 
   // Ratio: mm per CSS pixel

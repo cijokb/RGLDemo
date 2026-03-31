@@ -46,10 +46,17 @@ const LazyWidget: React.FC<LazyWidgetProps> = ({ widgetId, widgetType }) => {
       }, isExporting ? 0 : 50 + (Math.random() * 200)); 
 
       return () => clearTimeout(deferTimer);
-    } else {
-      setIsChartReady(false);
     }
+    // Reset is handled below via a separate effect to avoid synchronous setState in effect body
   }, [effectiveInView, isNonReport, isExporting]);
+
+  // Reset chart readiness when scrolled out of view
+  useEffect(() => {
+    if (!isNonReport && !effectiveInView && isChartReady) {
+      const timer = setTimeout(() => setIsChartReady(false), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [effectiveInView, isNonReport, isChartReady]);
 
   useEffect(() => {
     if (isNonReport) return;

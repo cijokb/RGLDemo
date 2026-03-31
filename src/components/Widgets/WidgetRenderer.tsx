@@ -15,11 +15,12 @@ import type { RootState } from '../../store/store';
 import { updateWidgetUIState } from '../../store/dashboardSlice';
 
 // Helper to handle ESM/CJS module interop for Highcharts modules
-function initializeHighchartsModule(mod: any, hc: typeof Highcharts) {
-  const initializer = typeof mod === 'function' ? mod : (mod as any)?.default;
-  if (initializer && typeof initializer === 'function') {
-    initializer(hc);
-  }
+type HighchartsModuleInitializer = (hc: typeof Highcharts) => void;
+
+function initializeHighchartsModule(mod: unknown, hc: typeof Highcharts) {
+  const m = mod as HighchartsModuleInitializer | { default?: HighchartsModuleInitializer };
+  const initializer = typeof m === 'function' ? m : m?.default;
+  initializer?.(hc);
 }
 
 // Initialize Highcharts modules
@@ -33,12 +34,13 @@ if (typeof Highcharts === 'object') {
 }
 
 // Vite ESM Interop for HighchartsReact
-const HighchartsReactComponent = (HighchartsReact as any)?.default || HighchartsReact;
+const HighchartsReactComponent = (HighchartsReact as unknown as { default?: typeof HighchartsReact })?.default || HighchartsReact;
 
 interface WidgetRendererProps {
   widgetId: string;
   type: string;
   loading?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any;
   backgroundColor?: string;
   backgroundImage?: string;
@@ -78,7 +80,7 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
   const uiState = useSelector((state: RootState) => state.dashboard.widgetUIState[widgetId] || EMPTY_UI_STATE);
   
   // --- Pagination Hook (Always defined at top level) ---
-  const handleChangePage = useCallback((_: any, newPage: number) => {
+  const handleChangePage = useCallback((_: unknown, newPage: number) => {
     dispatch(updateWidgetUIState({ id: widgetId, state: { page: newPage } }));
   }, [dispatch, widgetId]);
 
@@ -96,15 +98,15 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
     };
 
     if (data) {
-      const chartType = data.chartType || type;
+      const chartType = (data.chartType as string) || type;
       opt.chart = {
         ...opt.chart,
-        type: (chartType === 'radar' ? 'line' : chartType) as any,
+        type: (chartType === 'radar' ? 'line' : chartType) as Highcharts.SeriesOptionsType['type'],
         ...(chartType === 'radar' ? { polar: true } : {}),
         ...(chartType === 'heatmap' ? { styledMode: false } : {}),
         events: {
-          drilldown: (e: any) => {
-            dispatch(updateWidgetUIState({ id: widgetId, state: { drilldownId: e.point.drilldown } }));
+          drilldown: (e: Highcharts.DrilldownEventObject) => {
+            dispatch(updateWidgetUIState({ id: widgetId, state: { drilldownId: (e.point as Highcharts.PointOptionsObject & { drilldown?: string }).drilldown } }));
           },
           drillup: () => {
             dispatch(updateWidgetUIState({ id: widgetId, state: { drilldownId: null } }));
@@ -112,7 +114,7 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
         }
       };
       // Deep clone data from Redux to prevent "object is not extensible" errors from Highcharts mutations
-      const safeData = JSON.parse(JSON.stringify(data));
+      const safeData = structuredClone(data);
 
       if (safeData.xAxis) opt.xAxis = safeData.xAxis;
       if (safeData.yAxis) opt.yAxis = safeData.yAxis;
@@ -122,6 +124,7 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
 
       // Persistence: Restore drilldown state if it exists
       if (uiState.drilldownId && safeData.drilldown?.series) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const subSeries = safeData.drilldown.series.find((s: any) => s.id === uiState.drilldownId);
         if (subSeries) {
           opt.series = [subSeries];
@@ -196,8 +199,8 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
   }
 
   if (type.startsWith('metric')) {
-    const metricValue = data?.value ?? '42,000';
-    const metricLabel = data?.label ?? 'Total Audits Completed';
+    const metricValue = String(data?.value ?? '42,000');
+    const metricLabel = String(data?.label ?? 'Total Audits Completed');
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <Typography variant="h3" color="primary" fontWeight="bold">{metricValue}</Typography>
@@ -207,8 +210,8 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
   }
 
   if (type.startsWith('table')) {
-    const rows = data?.rows ?? fallbackTableData;
-    const page = uiState.page || 0;
+    const rows: Array<{ id: number; finding: string; risk: string; status: string }> = data?.rows ?? fallbackTableData;
+    const page = (uiState.page as number) || 0;
     const rowsPerPage = 5;
     const paginatedRows = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
@@ -224,7 +227,7 @@ const WidgetContent: React.FC<WidgetRendererProps> = ({ widgetId, type, loading,
               </TableRow>
             </TableHead>
             <TableBody>
-              {paginatedRows.map((row: any) => (
+              {paginatedRows.map((row) => (
                 <TableRow key={row.id} hover>
                   <TableCell sx={{ py: 0.5 }}>{row.finding}</TableCell>
                   <TableCell sx={{ py: 0.5 }}>{row.risk}</TableCell>

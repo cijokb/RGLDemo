@@ -245,7 +245,7 @@ const generateDrilldownData = () => ({
 
 // --- Generator Map ---
 
-const dataGenerators: Record<string, (labelOverride?: string) => any> = {
+const dataGenerators: Record<string, (labelOverride?: string) => unknown> = {
   bar: generateBarData,
   pie: generatePieData,
   line: generateLineData,
@@ -274,11 +274,11 @@ export const fetchWidgetData = async (
   widgetId: string,
   widgetType: string,
   widgetName?: string
-): Promise<any> => {
+): Promise<unknown> => {
   // Trigger a real fetch request so it's visible in the Chrome Network tab.
   try {
-    await fetch(`/api/widgets/${widgetId}?type=${widgetType}`).catch(() => {});
-  } catch (e) {
+    await fetch(`/api/widgets/${encodeURIComponent(widgetId)}?type=${encodeURIComponent(widgetType)}`).catch(() => {});
+  } catch {
     // Silent catch
   }
 

@@ -16,11 +16,27 @@ export interface WidgetData {
   titleColor?: string;
 }
 
+export interface LayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+  static?: boolean;
+  isDraggable?: boolean;
+  isResizable?: boolean;
+  moved?: boolean;
+}
+
 interface DashboardState {
-  layouts: { [breakpoint: string]: any[] };
+  layouts: { [breakpoint: string]: LayoutItem[] };
   widgets: Record<string, WidgetData>;
-  widgetData: Record<string, { loading: boolean; data: any | null }>;
-  widgetUIState: Record<string, any>; // Stores pagination, sorting, etc.
+  widgetData: Record<string, { loading: boolean; data: unknown }>;
+  widgetUIState: Record<string, Record<string, unknown>>;
   activeWidgetId: string | null;
   draggedWidgetTemplate: { type: string; name: string } | null;
   name: string;
@@ -71,7 +87,7 @@ export const dashboardSlice = createSlice({
   name: 'dashboard',
   initialState,
   reducers: {
-    addWidget: (state, action: PayloadAction<{ layout: any; widget: WidgetData }>) => {
+    addWidget: (state, action: PayloadAction<{ layout: LayoutItem; widget: WidgetData }>) => {
       const { layout, widget } = action.payload;
       
       if (!state.layouts.lg) state.layouts.lg = [];
@@ -83,7 +99,7 @@ export const dashboardSlice = createSlice({
       
       state.widgets[widget.id] = widget;
     },
-    dropWidget: (state, action: PayloadAction<{ breakpoint: string; layout: any[]; widget: WidgetData }>) => {
+    dropWidget: (state, action: PayloadAction<{ breakpoint: string; layout: LayoutItem[]; widget: WidgetData }>) => {
       const { layout, widget } = action.payload;
       
       // Always store under 'lg' since we use a single breakpoint
@@ -91,13 +107,13 @@ export const dashboardSlice = createSlice({
       
       state.widgets[widget.id] = widget;
     },
-    updateLayout: (state, action: PayloadAction<{ [key: string]: any[] }>) => {
+    updateLayout: (state, action: PayloadAction<{ [key: string]: LayoutItem[] }>) => {
       state.layouts = { ...state.layouts, ...action.payload };
     },
     removeWidget: (state, action: PayloadAction<string>) => {
       const id = action.payload;
       Object.keys(state.layouts).forEach(bp => {
-        state.layouts[bp] = state.layouts[bp].filter((l: any) => l.i !== id);
+        state.layouts[bp] = state.layouts[bp].filter((l) => l.i !== id);
       });
       delete state.widgets[id];
       delete state.widgetData[id];
@@ -140,10 +156,10 @@ export const dashboardSlice = createSlice({
     setWidgetLoading: (state, action: PayloadAction<string>) => {
       state.widgetData[action.payload] = { loading: true, data: null };
     },
-    setWidgetData: (state, action: PayloadAction<{ id: string; data: any }>) => {
+    setWidgetData: (state, action: PayloadAction<{ id: string; data: unknown }>) => {
       state.widgetData[action.payload.id] = { loading: false, data: action.payload.data };
     },
-    updateWidgetUIState: (state, action: PayloadAction<{ id: string; state: any }>) => {
+    updateWidgetUIState: (state, action: PayloadAction<{ id: string; state: Record<string, unknown> }>) => {
       const { id, state: newState } = action.payload;
       state.widgetUIState[id] = { ...(state.widgetUIState[id] || {}), ...newState };
     },

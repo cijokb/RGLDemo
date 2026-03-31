@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
@@ -29,35 +29,35 @@ interface SavedDashboard {
   lastModified: number;
 }
 
+const readDashboardsFromStorage = (): SavedDashboard[] => {
+  const saved: SavedDashboard[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('dashboardData_')) {
+      try {
+        const id = key.replace('dashboardData_', '');
+        const data = JSON.parse(localStorage.getItem(key) || '{}');
+        saved.push({
+          id,
+          name: data.name || `Dashboard ${id}`,
+          description: data.description || 'No description provided.',
+          lastModified: 0
+        });
+      } catch (e) {
+        console.error(`Failed to parse dashboard ${key}`, e);
+      }
+    }
+  }
+  return saved.sort((a, b) => a.name.localeCompare(b.name));
+};
+
 const DashboardList: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const [dashboards, setDashboards] = useState<SavedDashboard[]>([]);
-
-  useEffect(() => {
-    loadDashboards();
-  }, []);
+  const [dashboards, setDashboards] = useState<SavedDashboard[]>(readDashboardsFromStorage);
 
   const loadDashboards = () => {
-    const saved: SavedDashboard[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('dashboardData_')) {
-        try {
-          const id = key.replace('dashboardData_', '');
-          const data = JSON.parse(localStorage.getItem(key) || '{}');
-          saved.push({
-            id,
-            name: data.name || `Dashboard ${id}`,
-            description: data.description || 'No description provided.',
-            lastModified: 0 // LocalStorage doesn't store mtime, we'd need to add it to the schema
-          });
-        } catch (e) {
-          console.error(`Failed to parse dashboard ${key}`, e);
-        }
-      }
-    }
-    setDashboards(saved.sort((a, b) => a.name.localeCompare(b.name)));
+    setDashboards(readDashboardsFromStorage());
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
