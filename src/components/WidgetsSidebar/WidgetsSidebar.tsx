@@ -37,11 +37,14 @@ const getIcon = (type: string) => {
   }
 };
 
-const availableWidgets = Object.keys(widgetsConfig).map(key => ({
+type WidgetConfigEntry = { name: string; category: string };
+const typedWidgetsConfig = widgetsConfig as Record<string, WidgetConfigEntry>;
+
+const availableWidgets = Object.keys(typedWidgetsConfig).map(key => ({
   id: `w-${key}`,
   type: key,
-  name: (widgetsConfig as any)[key].name,
-  category: (widgetsConfig as any)[key].category,
+  name: typedWidgetsConfig[key].name,
+  category: typedWidgetsConfig[key].category,
   icon: getIcon(key)
 }));
 
@@ -54,7 +57,7 @@ const WidgetsSidebar: React.FC = () => {
   const dispatch = useDispatch();
   const usedWidgetTypes = useSelector((state: RootState) => {
     const types = new Set<string>();
-    Object.values(state.dashboard.widgets).forEach((w: any) => types.add(w.type));
+    Object.values(state.dashboard.widgets).forEach((w) => types.add(w.type));
     return Array.from(types).sort();
   }, shallowEqual);
 
@@ -78,7 +81,7 @@ const WidgetsSidebar: React.FC = () => {
     return usedWidgetTypes.includes(type);
   };
   
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, widget: any) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, widget: { type: string; name: string }) => {
     e.dataTransfer.setData('text/plain', ''); 
     e.dataTransfer.effectAllowed = 'copy';
     dispatch(setDraggedWidgetTemplate({ type: widget.type, name: widget.name }));

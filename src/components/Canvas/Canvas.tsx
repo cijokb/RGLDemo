@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Responsive, useContainerWidth } from 'react-grid-layout';
+import type { Layout, LayoutItem, ResponsiveLayouts } from 'react-grid-layout';
+import type { LayoutItem as StoreLayoutItem } from '../../store/dashboardSlice';
 import { verticalCompactor } from 'react-grid-layout/core';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -111,7 +113,6 @@ const WidgetWrapper = React.memo(({ widgetId }: { widgetId: string }) => {
 });
 
 const Canvas: React.FC = () => {
-  console.log("Rendering Canvas");
   const dispatch = useDispatch();
   const layouts = useSelector((state: RootState) => state.dashboard.layouts);
   const draggedWidgetTemplate = useSelector((state: RootState) => state.dashboard.draggedWidgetTemplate);
@@ -125,14 +126,16 @@ const Canvas: React.FC = () => {
   const [currentBreakpoint, setCurrentBreakpoint] = useState('lg');
   const lastDispatchedRef = useRef<string>('');
 
-  const onLayoutChange = useCallback((_layout: any, allLayouts: any) => {
+  const onLayoutChange = useCallback((_layout: Layout, allLayouts: ResponsiveLayouts) => {
     if (isInteractingRef.current || isProcessingDropRef.current || draggedWidgetTemplate) return;
 
-    const cleanedLayouts: any = {};
+    const cleanedLayouts: { [key: string]: StoreLayoutItem[] } = {};
     for (const bp in allLayouts) {
-      cleanedLayouts[bp] = allLayouts[bp]
-        .filter((l: any) => l.i !== '__dropping-elem__')
-        .map((l: any) => ({ ...l }));
+      const bpLayout = allLayouts[bp];
+      if (!bpLayout) continue;
+      cleanedLayouts[bp] = bpLayout
+        .filter((l) => l.i !== '__dropping-elem__')
+        .map((l) => ({ ...l } as StoreLayoutItem));
     }
 
     const serialized = JSON.stringify(cleanedLayouts);
@@ -143,7 +146,7 @@ const Canvas: React.FC = () => {
     }
   }, [draggedWidgetTemplate, dispatch]);
 
-  const onDrop = (layout: any, _item: any, e: Event) => {
+  const onDrop = useCallback((layout: Layout, _item: LayoutItem | undefined, e: Event) => {
     e.preventDefault();
     isProcessingDropRef.current = true;
     try {
@@ -154,7 +157,7 @@ const Canvas: React.FC = () => {
 
       const newId = `w-${widgetType}-${uuidv4()}`;
 
-      const resolvedLayout = layout.map((l: any) => {
+      const resolvedLayout = layout.map((l) => {
         if (l.i === '__dropping-elem__') {
           return {
             ...l,
@@ -197,11 +200,17 @@ const Canvas: React.FC = () => {
         isProcessingDropRef.current = false;
       }, 100);
     }
-  };
+  }, [draggedWidgetTemplate, currentBreakpoint, dispatch]);
 
-  const onBreakpointChange = (newBreakpoint: string) => {
+  const onBreakpointChange = useCallback((newBreakpoint: string) => {
     setCurrentBreakpoint(newBreakpoint);
-  };
+  }, []);
+
+  const onDropDragOver = useCallback(() => {
+    const type = draggedWidgetTemplate?.type as keyof WidgetConfig;
+    const config = (type && widgetsConfig[type]) ? widgetsConfig[type] : { default: { w: 3, h: 6 } };
+    return { w: config.default.w, h: config.default.h };
+  }, [draggedWidgetTemplate]);
 
   return (
     <Box ref={containerRef} sx={{ minHeight: '100%', pb: 10 }} onClick={() => dispatch(setActiveWidget(null))}>
@@ -221,11 +230,7 @@ const Canvas: React.FC = () => {
           droppingItem={{ i: '__dropping-elem__', x: 0, y: 99, w: 3, h: 6 }}
           onLayoutChange={onLayoutChange}
           onDrop={onDrop}
-          onDropDragOver={(_e) => {
-            const type = draggedWidgetTemplate?.type as keyof WidgetConfig;
-            const config = (type && widgetsConfig[type]) ? widgetsConfig[type] : { default: { w: 3, h: 6 } };
-            return { w: config.default.w, h: config.default.h };
-          }}
+          onDropDragOver={onDropDragOver}
           onBreakpointChange={onBreakpointChange}
           onDragStart={() => { isInteractingRef.current = true; }}
           onDragStop={() => { isInteractingRef.current = false; }}

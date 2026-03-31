@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { Box, Typography, IconButton, Paper, Tooltip, CircularProgress } from '@mui/material';
@@ -23,6 +23,20 @@ const DashboardViewer: React.FC = () => {
   
   const { width, containerRef, mounted } = useContainerWidth();
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Lock all layout items to prevent drag and resize in preview mode
+  const staticLayouts = useMemo(() => {
+    const result: typeof layouts = {};
+    for (const [bp, items] of Object.entries(layouts)) {
+      result[bp] = items.map((item) => ({
+        ...item,
+        static: true,
+        isDraggable: false,
+        isResizable: false,
+      }));
+    }
+    return result;
+  }, [layouts]);
 
   useEffect(() => {
     dispatch(loadDashboard(dashboardId));
@@ -108,17 +122,14 @@ const DashboardViewer: React.FC = () => {
       {/* Canvas Area */}
       <Box 
         sx={{ flexGrow: 1, p: 2, overflowY: isExporting ? 'visible' : 'auto', position: 'relative' }} 
-        ref={(el: HTMLDivElement | null) => {
-          // Share ref between useContainerWidth and our canvasRef
-          (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-          (canvasRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-        }}
+        ref={containerRef}
       >
+        <div ref={canvasRef}>
         {mounted && (
           <Responsive
             className="layout"
             width={width}
-            layouts={layouts}
+            layouts={staticLayouts}
             breakpoints={{ lg: 0 }}
             cols={{ lg: 12 }}
             rowHeight={45}
@@ -181,6 +192,7 @@ const DashboardViewer: React.FC = () => {
             })}
           </Responsive>
         )}
+        </div>
       </Box>
     </Box>
   );

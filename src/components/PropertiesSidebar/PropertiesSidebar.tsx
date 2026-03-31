@@ -5,7 +5,6 @@ import type { RootState } from '../../store/store';
 import { updateWidgetProperties, updateDashboardMetadata } from '../../store/dashboardSlice';
 
 const PropertiesSidebar: React.FC = () => {
-  console.log("Rendering PropertiesSidebar");
 
   const dispatch = useDispatch();
   const activeWidgetId = useSelector((state: RootState) => state.dashboard.activeWidgetId);
@@ -55,7 +54,7 @@ const PropertiesSidebar: React.FC = () => {
   const isLandingPage = widget.type === 'landing_page';
   const isNonReport = isDivider || isLandingPage;
 
-  const handleChange = (field: string, value: any) => {
+  const handleChange = (field: string, value: string | boolean) => {
     dispatch(updateWidgetProperties({ id: activeWidgetId, properties: { [field]: value } }));
   };
 
